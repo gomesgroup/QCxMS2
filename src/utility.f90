@@ -96,9 +96,9 @@ contains
          !$omp task firstprivate( vz ) private(tmppath,io )
          !$omp critical
          write (tmppath, '(a)') trim(pwd)//"/"//trim(dirs(vz))
-         !write (tmppath, '(a)') trim(dirs(vz))
          !$omp end critical
-         call execute_command_line('cd '//trim(tmppath)//' && '//trim(jobcall), exitstat=io)
+         ! Use system() instead of execute_command_line to avoid gfortran OpenMP bug
+         io = system('cd '//trim(tmppath)//' && '//trim(jobcall))
          !$omp critical
          k = k + 1
          !prints how many are finished but not which are still running

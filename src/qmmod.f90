@@ -750,8 +750,8 @@ contains
 
       close (ich)
 
-      ! ORCA has to be called with full path name
-      write (jobcall, '(a)') '$(which orca) orca.inp > orca.out 2>/dev/null'
+      ! ORCA has to be called with full path name (use global_orcapath from qcxms2_data)
+      write (jobcall, '(a)') trim(global_orcapath)//' orca.inp > orca.out 2>/dev/null'
 
       fout = 'orca.out'
 

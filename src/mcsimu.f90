@@ -346,24 +346,31 @@ contains
       do j = 1, npairs
          call rdshort_real(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/earrho_"//trim(env%geolevel), earrho)
 
-         call rdshort_int(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/nmode", nmode)
-
-          ! if only one imaginary mode is found, we can use hess instead of bhess
-         if (nmode .eq. 1 .and. (env%geolevel == "gfn2" .or. env%geolevel == "gfn2spinpol" .or. env%geolevel == "gfn2_tblite")) then
-            inquire (file=trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess2/ts.xyz", exist=ex)
-            if (ex) then 
-               call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess2")
-               call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .false.)
-               call chdir(trim(thisdir))  
-            else
-               call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess")
-               call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .false.)
-               call chdir(trim(thisdir)) 
-            end if
+         !> FIX: When --nots is used, skip TS thermochemistry (no ts/nmode file exists)
+         if (env%nots) then
+            !> No TS search was performed, set ts_rrhos to start_rrhos (no TS correction)
+            ts_rrhos = start_rrhos
+            nmode = 0
          else
-            call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/bhess")
-            call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .true.) ! for bhess we have to use constant ithr
-            call chdir(trim(thisdir))
+            call rdshort_int(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/nmode", nmode)
+
+             ! if only one imaginary mode is found, we can use hess instead of bhess
+            if (nmode .eq. 1 .and. (env%geolevel == "gfn2" .or. env%geolevel == "gfn2spinpol" .or. env%geolevel == "gfn2_tblite")) then
+               inquire (file=trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess2/ts.xyz", exist=ex)
+               if (ex) then 
+                  call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess2")
+                  call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .false.)
+                  call chdir(trim(thisdir))  
+               else
+                  call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/hess")
+                  call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .false.)
+                  call chdir(trim(thisdir)) 
+               end if
+            else
+               call chdir(trim(env%path)//"/"//trim(fragdirs(j, 1))//"/ts/bhess")
+               call xtbthermo(env, nincr, nvib, maxiee, ts_rrhos, .true.) ! for bhess we have to use constant ithr
+               call chdir(trim(thisdir))
+            end if
          end if 
 
          ! for DFT spectra

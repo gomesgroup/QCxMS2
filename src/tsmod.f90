@@ -1506,8 +1506,8 @@ contains
       write (ich, *) "*xyzfile ", chrg, " ", mult, " start.xyz"
       close (ich)
 
-      ! call orca with full path name
-      write (jobcall, '(a)') '$(which orca) orca.inp > orca.out 2> orcaerr.out && touch neb_finished '
+      ! call orca with full path name (use global_orcapath from qcxms2_data)
+      write (jobcall, '(a)') trim(global_orcapath)//' orca.inp > orca.out 2> orcaerr.out && touch neb_finished '
    end subroutine prepneb
 
    !> prepare gsm.orca calculation
@@ -1710,7 +1710,7 @@ contains
             write (ich, '(a,i0,1x,i0,1x,a)') 'echo "*xyz ', chrg, mult,'">> $ofile'
             write (ich, '(a)') 'cat $molfile  >> $ofile'
             write (ich, '(a)') 'echo "*" >> $ofile'
-            write (ich, '(a)') 'orcabin=$(which orca)'
+            write (ich, '(a)') 'orcabin='//trim(global_orcapath)
             write (ich, '(a)') '$orcabin $ofile > $ofileout'
             write (ich, '(a)') 'tm2orca.py $basename '
             !write (ich, '(a,i0,a)') 'srun --nodes 1 --ntasks ',env%threads, ' --cpus-per-task 1 $orcabin $ofile > $ofileout' 

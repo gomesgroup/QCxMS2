@@ -543,7 +543,7 @@ contains
       write (*, '(a,x,a)') "IEE distribution:", env%edist
       write (*, '(a,1f5.2)') "width of IEE distribution (eimpw) is: ", env%eimpw
       write (*, '(a,1f5.2,x,a)') "energy per atom (ieeatm) is: ", env%ieeatm, "eV"
-      write (*, '(a,1f5.2x,a)') "eimp0 is: ", env%eimp0, "eV"
+      write (*, '(a,1f5.2,x,a)') "eimp0 is: ", env%eimp0, "eV"
 
      if (env%exstates > 0 .and. (.not. (env%tslevel == 'wb97x3c' .or. env%tslevel == 'r2scan3c' .or. env%tslevel == 'pbeh3c'))) then
          write (*, *) "Warning excited states via TD-DFT only possible for DFT functionals"
@@ -616,7 +616,7 @@ contains
       implicit none
       type(runtypedata) :: env
       character(len=80), dimension(4) :: levels
-      character(len=1024) :: xtbpath
+      character(len=1024) :: xtbpath, orcapath
       integer :: i, io
       logical :: ex
 
@@ -640,6 +640,13 @@ contains
       io = setenv('XTBEXE', trim(xtbpath))
       !call execute_command_line('export XTBEXE=$(which xtb)')
       call execute_command_line('echo "xtb path set for orca: $XTBEXE"')
+
+      ! Set ORCA path for NEB calculations (store in global variable for direct use)
+      call execute_command_line("echo $(which orca) > tmp.orcapath")
+      call rdshort_string('tmp.orcapath', orcapath)
+      call remove('tmp.orcapath')
+      global_orcapath = trim(orcapath)  ! Set the module-level variable
+      write(*,'(a,a)') 'orca path set: ', trim(global_orcapath)
 
       ! check python program paths
       if (env%msmolbar .or. env%topocheck == "molbar") then

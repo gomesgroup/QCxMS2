@@ -3,6 +3,9 @@ module qcxms2_data
    implicit none
    public
 
+   ! Global paths for external programs (set by check_progs in argparser.f90)
+   character(len=1024), save :: global_orcapath = ''
+
    type :: timer
       integer :: times = 0
       integer(wp) :: rate
