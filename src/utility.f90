@@ -56,6 +56,7 @@ contains
 !jobcall is always the same job
 ! dirs is list of dirs where job should be executed relative to starting directory
    subroutine omp_samejobcall(njobs, dirs, jobcall, print)
+      use qcxms2_data, only: global_use_multinode
       implicit none
       integer, intent(in) :: njobs
       character(len=1024), intent(in) :: jobcall
@@ -68,6 +69,8 @@ contains
       logical :: lprint
       integer :: i, io, vz, k
       integer :: shift ! first element often zero in dirs array
+      character(len=32) :: slurm_nnodes_str
+      integer :: num_nodes
 
       ! print progress
       if (present(print)) then
@@ -78,6 +81,19 @@ contains
 
       ! prevent error here
       if (njobs .le. 0) return
+
+      ! Check for multi-node execution via GNU Parallel
+      ! Only use multi-node for 5+ jobs to avoid SSH overhead for small job sets
+      if (global_use_multinode .and. njobs >= 5) then
+         call get_environment_variable('SLURM_JOB_NUM_NODES', slurm_nnodes_str)
+         if (len_trim(slurm_nnodes_str) > 0) then
+            read(slurm_nnodes_str, *, iostat=io) num_nodes
+            if (io == 0 .and. num_nodes > 1) then
+               call gnu_parallel_jobcall(njobs, dirs, jobcall, lprint)
+               return
+            end if
+         end if
+      end if
 
       if (dirs(1) .eq. '') then
          shift = 1
@@ -112,6 +128,91 @@ contains
 !$omp end parallel
       write (*, *)
    end subroutine omp_samejobcall
+
+!> Distribute jobs across multiple SLURM nodes using GNU Parallel
+!> This is called when -multinode flag is set and running in a multi-node SLURM allocation
+   subroutine gnu_parallel_jobcall(njobs, dirs, jobcall, lprint)
+      implicit none
+      integer, intent(in) :: njobs
+      character(len=1024), intent(in) :: jobcall
+      character(len=80), intent(in) :: dirs(:)
+      logical, intent(in) :: lprint
+      
+      character(len=8192) :: parallel_cmd
+      character(len=1024) :: pwd, taskfile, nodefile
+      character(len=32) :: slurm_nnodes_str, pid_str
+      integer :: i, io, shift, num_nodes, ich
+      
+      if (njobs <= 0) return
+      
+      if (dirs(1) == '') then
+         shift = 1
+      else
+         shift = 0
+      end if
+      
+      call getcwd(pwd)
+      
+      ! Get number of nodes for status message
+      call get_environment_variable('SLURM_JOB_NUM_NODES', slurm_nnodes_str)
+      read(slurm_nnodes_str, *, iostat=io) num_nodes
+      if (io /= 0) num_nodes = 1
+      
+      ! Create unique filenames using process ID
+      write(pid_str, '(i0)') getpid()
+      taskfile = trim(pwd)//'/.qcxms2_tasks_'//trim(pid_str)//'.txt'
+      nodefile = '/tmp/qcxms2_nodefile_'//trim(pid_str)//'.txt'
+      
+      ! Write task file with full directory paths
+      open(newunit=ich, file=taskfile, status='replace', iostat=io)
+      if (io /= 0) then
+         write(*,*) "ERROR: Could not create task file for GNU Parallel"
+         return
+      end if
+      do i = 1, njobs
+         write(ich, '(a)') trim(pwd)//'/'//trim(dirs(i + shift))
+      end do
+      close(ich)
+      
+      ! Create nodefile from SLURM with proper format for GNU Parallel
+      ! Use 1/ prefix to indicate 1 job slot per host (we run 1 ORCA job at a time per host)
+      io = system('scontrol show hostnames $SLURM_JOB_NODELIST | sed "s/^/1\//" > '//trim(nodefile))
+      if (io /= 0) then
+         write(*,*) "WARNING: Could not get SLURM node list, falling back to local execution"
+         call remove(taskfile)
+         return
+      end if
+      
+      if (lprint) then
+         write(*,'(a,i0,a,i0,a)') " Distributing ", njobs, " jobs across ", num_nodes, " SLURM nodes via GNU Parallel"
+      end if
+      
+      ! Build and execute GNU Parallel command
+      ! --sshloginfile: read hosts from file (format: slots/host)
+      ! --env: pass environment variables to remote nodes
+      ! --workdir: set working directory on remote
+      ! --sshdelay: prevent SSH connection storms
+      ! PARALLEL_SSH: custom SSH command with no host key checking
+      write(parallel_cmd, '(a)') &
+         'export PARALLEL_SSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q" && '// &
+         'parallel --progress --sshloginfile '//trim(nodefile)//' '// &
+         '--sshdelay 0.1 '// &
+         '--env PATH --env LD_LIBRARY_PATH --env OMP_NUM_THREADS '// &
+         '--env XTBPATH --env XTBEXE --env ORCA_DIR --env MKL_NUM_THREADS '// &
+         '--env PYTHONPATH --env HOME '// &
+         '--workdir '//trim(pwd)//' '// &
+         '"cd {} && '//trim(jobcall)//'" '// &
+         '< '//trim(taskfile)//' 2>&1'
+      
+      io = system(trim(parallel_cmd))
+      
+      ! Cleanup temporary files
+      call remove(taskfile)
+      call remove(nodefile)
+      
+      if (lprint) write(*,*)
+      
+   end subroutine gnu_parallel_jobcall
 
 ! threads is flexibel omp is fixed
    subroutine setompthreads(env, njobs)

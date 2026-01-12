@@ -396,10 +396,10 @@ contains
       end do
 
       ! cleanup NEB runs
-      
-     
-      write (cleanupcall, '(a)') 'rm orca_im*.gbw orca_im*.citations.tmp orca_im*.xtbrestart'
+      ! Note: fragdirs_in entries may be empty ('') if search failed, skip those
+      write (cleanupcall, '(a)') 'rm orca_im*.gbw orca_im*.citations.tmp orca_im*.xtbrestart 2>/dev/null'
       do i = 1, npairs_in
+         if (len_trim(fragdirs_in(i, 1)) == 0) cycle  ! skip empty entries
          call chdir(trim(fragdirs_in(i, 1)))
          call cleanup_nebcalc()
          call execute_command_line(trim(cleanupcall))
@@ -2516,8 +2516,8 @@ contains
       call remove("orca.NEB.log")
       call remove("orca_NEB-HEI_converged.xyz")
       call remove("orca_MEP_ALL_trj.xyz")
-      call execute_command_line("rm orca_atom*")
-      call execute_command_line("rm orca_im*")
+      call execute_command_line("rm orca_atom* 2>/dev/null")
+      call execute_command_line("rm orca_im* 2>/dev/null")
    
    end subroutine cleanup_nebcalc
 

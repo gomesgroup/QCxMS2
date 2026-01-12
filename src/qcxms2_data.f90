@@ -6,6 +6,11 @@ module qcxms2_data
    ! Global paths for external programs (set by check_progs in argparser.f90)
    character(len=1024), save :: global_orcapath = ''
 
+   ! Global flag for multi-node execution via GNU Parallel
+   ! When enabled and running in a multi-node SLURM allocation, jobs will be
+   ! distributed across nodes using GNU Parallel instead of OpenMP tasks
+   logical, save :: global_use_multinode = .false.
+
    type :: timer
       integer :: times = 0
       integer(wp) :: rate

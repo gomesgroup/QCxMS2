@@ -364,7 +364,9 @@ contains
             call readl(arg(i + 1), xx, j)
             env%cid_scool = xx(1)
          case ('-solv ') !  deprecated experimental option to include solvation effects for barrier calculation
-            env%solv = .true.   
+            env%solv = .true.
+         case ('-multinode ')  ! enable multi-node execution via GNU Parallel
+            global_use_multinode = .true.
          case default
             continue
          end select
@@ -420,6 +422,7 @@ contains
       write (*, '(5x,''-ieeatm: give energy per atom in eV (default 0.8)'')')
       write (*, '(5x,''-nots: take reaction energy instead of barrier -> no path search (quickmode for fragments)'')')
       write (*, '(5x,''-T  : select number of overall cores, (default 4) '')')
+      write (*, '(5x,''-multinode: distribute jobs across SLURM nodes via GNU Parallel (requires multi-node allocation)'')')
       write (*, '(5x,''-nfrag [integer]: select number of subsequent fragmentations you want to simulate (default 6) '')')
       write (*, '(5x,''-pthr [real] intensity at which fragment is further fragmented in % (default  1%)'')')
       write (*, *)
