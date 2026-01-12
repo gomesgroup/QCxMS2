@@ -16,8 +16,9 @@ module qcxms2_data
    ! This can provide 100-1000x speedup for transition state searches
    logical, save :: global_use_mlip = .false.
    
-   ! Path to the MLIP client script for ORCA ExtOpt (use wrapper for portable execution)
-   character(len=1024), save :: global_mlip_client = '/mnt/beegfs/software/orca-mlip-clients/aimnet2-gpg-wrapper.sh'
+   ! Path to the MLIP client script for ORCA ExtOpt
+   ! Using id-gpu01 JSON API (fast) instead of gpg-boltzmann file API (slow)
+   character(len=1024), save :: global_mlip_client = '/mnt/beegfs/software/orca-mlip-clients/aimnet2-idgpu01-wrapper.sh'
 
    type :: timer
       integer :: times = 0

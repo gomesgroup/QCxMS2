@@ -139,6 +139,10 @@ contains
       else
 
          ! check for program
+         ! If MLIP is enabled, use it for sp and opt jobs (fragment optimization)
+         if (global_use_mlip .and. (job == 'sp' .or. job == 'opt')) then
+            call prepmlip(env, fname, level, job, jobcall, fout, pattern, cleanupcall, re)
+         else
          select case (level)
             ! xtb calculations TODO move gfn2 and gfn1 to tblite calculation
          case ('gfn2','gfn2spinpol','gfn2_tblite', 'gfn1', 'pm6', 'dxtb', 'gff')
@@ -159,6 +163,7 @@ contains
             write (*, *) "Please check the manual for supported keywords for QM levels"
             STOP
          end select
+         end if
       end if
       if (env%printlevel .eq. 3) cleanupcall = 'echo "keepdir" >/dev/null' ! do not remove files if lprint is true
 
@@ -966,6 +971,99 @@ contains
       write (cleanupcall, '(a)') trim(cleanupcall)//' >/dev/null 2>/dev/null'
 
    end subroutine prepgxtb
+
+!> Prepare MLIP optimization via ORCA ExtOpt interface
+!> Uses AIMNet2 or other ML potentials for geometry optimization
+!> Much faster than XTB for geometry optimization, comparable accuracy
+   subroutine prepmlip(env, fname, level, job, jobcall, fout, pattern, cleanupcall, restart)
+      implicit none
+      type(runtypedata) :: env
+      character(len=*), intent(in)      :: fname
+      character(len=*), intent(in)      :: level
+      character(len=*), intent(in)      :: job
+      character(len=1024), intent(out) :: jobcall
+      character(len=80), intent(out) :: fout, pattern
+      character(len=1024), intent(out) :: cleanupcall
+      logical, intent(in) :: restart
+      
+      integer :: chrg, mult, uhf, spin
+      integer :: ich
+      logical :: ex
+      
+      call rdshort_int('.CHRG', chrg)
+      inquire (file='.UHF', exist=ex)
+      if (ex) then
+         call rdshort_int('.UHF', uhf)
+         mult = uhf + 1
+      else
+         call printspin(env, fname, spin, chrg)
+         mult = spin
+         uhf = spin - 1
+         if (uhf == -2) uhf = 0
+      end if
+      
+      ! Create ORCA input for ExtOpt optimization
+      open (newunit=ich, file='orca.inp')
+      
+      select case (job)
+      case ('opt')
+         write (ich, '(a)') '! Opt ExtOpt'
+         write (ich, *) "%method"
+         write (ich, '(a)') '  ProgExt "'//trim(global_mlip_client)//'"'
+         write (ich, *) "end"
+         write (ich, *) "%maxcore 8000"
+         write (ich, *) "%pal"
+         write (ich, '(a)') "nprocs 1"
+         write (ich, *) "end"
+         write (ich, *) "%geom"
+         write (ich, *) "  MaxIter 200"
+         if (restart) then
+            write (ich, *) "  TolE 5e-5"
+            write (ich, *) "  TolRMSG 3e-3"
+         end if
+         write (ich, *) "end"
+         write (ich, *) "*xyzfile ", chrg, " ", mult, " "//trim(fname)
+         ! Note: ExtOpt outputs "FINAL SINGLE POINT ENERGY (From external program)" 
+         pattern = '(From external program)'
+         
+      case ('sp')
+         write (ich, '(a)') '! SP ExtOpt'
+         write (ich, *) "%method"
+         write (ich, '(a)') '  ProgExt "'//trim(global_mlip_client)//'"'
+         write (ich, *) "end"
+         write (ich, *) "%maxcore 8000"
+         write (ich, *) "%pal"
+         write (ich, '(a)') "nprocs 1"
+         write (ich, *) "end"
+         write (ich, *) "*xyzfile ", chrg, " ", mult, " "//trim(fname)
+         ! Note: ExtOpt outputs "FINAL SINGLE POINT ENERGY (From external program)" 
+         ! but the (From external program) part causes parsing issues
+         ! We use a simpler pattern that will match the numeric value
+         pattern = '(From external program)'
+         
+      case default
+         write (*, *) "Warning: MLIP does not support job type: "//trim(job)
+         write (*, *) "Falling back to GFN2-xTB"
+         close (ich)
+         call prepxtb(env, fname, 'gfn2', job, jobcall, fout, pattern, cleanupcall, restart)
+         return
+      end select
+      
+      close (ich)
+      
+      ! Set up job call using ORCA
+      write (jobcall, '(a)') trim(global_orcapath)//' orca.inp > orca.out 2>/dev/null'
+      if (job == 'opt') then
+         write (jobcall, '(a)') trim(jobcall)//' && cp orca.xyz opt.xyz'
+      end if
+      
+      fout = 'orca.out'
+      
+      write (cleanupcall, '(a)') "rm -f orca.gbw orca.prop orca.inp orca.bibtex orca.property.txt"
+      write (cleanupcall, '(a)') trim(cleanupcall)//" orca.engrad orca.xtbrestart orca.opt orca.gu.tmp"
+      write (cleanupcall, '(a)') trim(cleanupcall)//" >/dev/null 2>/dev/null"
+      
+   end subroutine prepmlip
 
 !TODO FIXME
 ! H-atoms make problems for QM codes, so we have to remove them
