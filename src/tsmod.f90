@@ -1419,68 +1419,87 @@ contains
       open (newunit=ich, file='orca.inp')
       open (newunit=ich, file='orca.inp')
 
-      write (ich, '(a)') '! NEB   ' ! "LOOSE-NEB" doesnt work ....
-      
-      if (env%solv) then
-         if (env%geolevel == 'gfn2' .or. env%geolevel == 'gfn1' .or. env%geolevel == 'gfn2spinpol' .or. env%geolevel == 'gfn2_tblite') then
-         write (ich, *) "! ALPB(water)" 
+      ! Use MLIP (AIMNet2) if enabled, otherwise use standard XTB2/DFT
+      if (global_use_mlip) then
+         ! MLIP-accelerated NEB using AIMNet2 via ORCA ExtOpt
+         write (ich, '(a)') '! NEB ExtOpt'
+         write (ich, *) "%method"
+         write (ich, '(a)') '  ProgExt "'//trim(global_mlip_client)//'"'
+         write (ich, *) "end"
+         write (ich, *) "%maxcore 8000"
+      else
+         ! Standard XTB2/DFT-based NEB
+         write (ich, '(a)') '! NEB   ' ! "LOOSE-NEB" doesnt work ....
+         
+         if (env%solv) then
+            if (env%geolevel == 'gfn2' .or. env%geolevel == 'gfn1' .or. env%geolevel == 'gfn2spinpol' .or. env%geolevel == 'gfn2_tblite') then
+            write (ich, *) "! ALPB(water)" 
+            end if
+        end if
+
+         
+         write (ich, *) "! "//trim(levelkeyword)
+         if (env%geolevel .ne. 'gfn1' .and. env%geolevel .ne. 'gfn2' .and. env%geolevel .ne. 'gfn2spinpol') then
+            write (ich, *) "! LOOSESCF UKS" ! DFT calculations with UKS for correct dissociation and LOOSESCF for faster convergence
          end if
-     end if
-
-      
-      write (ich, *) "! "//trim(levelkeyword)
-      if (env%geolevel .ne. 'gfn1' .and. env%geolevel .ne. 'gfn2' .and. env%geolevel .ne. 'gfn2spinpol') then
-         write (ich, *) "! LOOSESCF UKS" ! DFT calculations with UKS for correct dissociation and LOOSESCF for faster convergence
-      end if
-      write (ich, *) "%maxcore 8000" ! TODO make parameter or read in orca sample input file
+         write (ich, *) "%maxcore 8000" ! TODO make parameter or read in orca sample input file
 
 
-      !use  tblite for proper uhf scf
-      if (env%geolevel == 'gfn2_tblite') then
-         xtbstring = 'XTBINPUTSTRING2 "--tblite "'
-         write (ich, *) "%xtb"
-         write (ich, '(a)') trim(xtbstring)
-         write (ich, *) "end"
-      end if
-
-
-      !use  spinpol
-      if (env%geolevel == 'gfn2spinpol') then
-         xtbstring = 'XTBINPUTSTRING2 "--tblite --spinpol"'
-         write (ich, *) "%xtb"
-         write (ich, '(a)') trim(xtbstring)
-         write (ich, *) "end"
-      end if
-
-      if (env%geolevel == 'gfn2' .or. env%geolevel == 'gfn1') then 
-         if (fermi)  then 
-            write(xtbstring,'(a,i0,a)') 'XTBINPUTSTRING2 "--etemp ',etemp,'"'
+         !use  tblite for proper uhf scf
+         if (env%geolevel == 'gfn2_tblite') then
+            xtbstring = 'XTBINPUTSTRING2 "--tblite "'
             write (ich, *) "%xtb"
             write (ich, '(a)') trim(xtbstring)
             write (ich, *) "end"
          end if
-      end if
 
-      if (env%geolevel == 'gxtb') then
-         xtbstring = 'XTBINPUTSTRING2 "--driver ''gxtb -c xtbdriver.xyz -symthr 0.0  -b  ~/.basisq ''"'
-         if (fermi)  write(xtbstring,'(a,i0,a)') 'XTBINPUTSTRING2 "--driver ''gxtb -c orca.xtbdriver.xyz -tel  -b  ~/.basisq  ',etemp,' -symthr 0.0''"'
-         write (ich, *) "%xtb"
-         write (ich, '(a)') trim(xtbstring)
+
+         !use  spinpol
+         if (env%geolevel == 'gfn2spinpol') then
+            xtbstring = 'XTBINPUTSTRING2 "--tblite --spinpol"'
+            write (ich, *) "%xtb"
+            write (ich, '(a)') trim(xtbstring)
+            write (ich, *) "end"
+         end if
+
+         if (env%geolevel == 'gfn2' .or. env%geolevel == 'gfn1') then 
+            if (fermi)  then 
+               write(xtbstring,'(a,i0,a)') 'XTBINPUTSTRING2 "--etemp ',etemp,'"'
+               write (ich, *) "%xtb"
+               write (ich, '(a)') trim(xtbstring)
+               write (ich, *) "end"
+            end if
+         end if
+
+         if (env%geolevel == 'gxtb') then
+            xtbstring = 'XTBINPUTSTRING2 "--driver ''gxtb -c xtbdriver.xyz -symthr 0.0  -b  ~/.basisq ''"'
+            if (fermi)  write(xtbstring,'(a,i0,a)') 'XTBINPUTSTRING2 "--driver ''gxtb -c orca.xtbdriver.xyz -tel  -b  ~/.basisq  ',etemp,' -symthr 0.0''"'
+            write (ich, *) "%xtb"
+            write (ich, '(a)') trim(xtbstring)
+            write (ich, *) "end"
+            call touch('.GRAD')
+         end if
+      end if
+      
+      ! Parallel settings (not used for MLIP as calculations run on GPU server)
+      if (.not. global_use_mlip) then
+         write (ich, *) "%pal"
+         if (trim(env%geolevel) == "gxtb") then
+            write (ich, '(a)') "nprocs 1"
+         else
+            write (ich, '(a,i0)') "nprocs ", env%threads
+         end if
          write (ich, *) "end"
-         call touch('.GRAD')
-      end if
-      ! TODO problem of xtbdriver here,dirty first solution for now
-      write (ich, *) "%pal"
-      if (trim(env%geolevel) == "gxtb") then
-         write (ich, '(a)') "nprocs 1"
-      else
-         write (ich, '(a,i0)') "nprocs ", env%threads
-      end if
-      write (ich, *) "end"
 
-      if (fermi .or. env%geolevel == "gfn2") then
-         write (ich, *) "%scf"
-         write (ich, *) "SmearTemp ", etemp
+         if (fermi .or. env%geolevel == "gfn2") then
+            write (ich, *) "%scf"
+            write (ich, *) "SmearTemp ", etemp
+            write (ich, *) "end"
+         end if
+      else
+         ! For MLIP, use single process (calculations run remotely on GPU)
+         write (ich, *) "%pal"
+         write (ich, '(a)') "nprocs 1"
          write (ich, *) "end"
       end if
       write (ich, '(a)') '%NEB NEB_END_XYZFILE "end.xyz" '

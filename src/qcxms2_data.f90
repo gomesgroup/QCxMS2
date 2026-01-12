@@ -10,6 +10,14 @@ module qcxms2_data
    ! When enabled and running in a multi-node SLURM allocation, jobs will be
    ! distributed across nodes using GNU Parallel instead of OpenMP tasks
    logical, save :: global_use_multinode = .false.
+   
+   ! Global flag for MLIP-accelerated NEB calculations
+   ! When enabled, use AIMNet2 ML potential instead of XTB2 for NEB path search
+   ! This can provide 100-1000x speedup for transition state searches
+   logical, save :: global_use_mlip = .false.
+   
+   ! Path to the MLIP client script for ORCA ExtOpt
+   character(len=1024), save :: global_mlip_client = '/mnt/beegfs/software/orca-mlip-clients/aimnet2-gpg.py'
 
    type :: timer
       integer :: times = 0

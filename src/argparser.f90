@@ -367,6 +367,9 @@ contains
             env%solv = .true.
          case ('-multinode ')  ! enable multi-node execution via GNU Parallel
             global_use_multinode = .true.
+         case ('-mlip ')  ! use MLIP (AIMNet2) for NEB instead of XTB2
+            global_use_mlip = .true.
+            write(*,*) "MLIP-accelerated NEB enabled (using AIMNet2 via gpg-boltzmann)"
          case default
             continue
          end select
@@ -423,6 +426,7 @@ contains
       write (*, '(5x,''-nots: take reaction energy instead of barrier -> no path search (quickmode for fragments)'')')
       write (*, '(5x,''-T  : select number of overall cores, (default 4) '')')
       write (*, '(5x,''-multinode: distribute jobs across SLURM nodes via GNU Parallel (requires multi-node allocation)'')')
+      write (*, '(5x,''-mlip: use AIMNet2 ML potential for NEB (100-1000x faster, requires gpg-boltzmann server)'')')
       write (*, '(5x,''-nfrag [integer]: select number of subsequent fragmentations you want to simulate (default 6) '')')
       write (*, '(5x,''-pthr [real] intensity at which fragment is further fragmented in % (default  1%)'')')
       write (*, *)
