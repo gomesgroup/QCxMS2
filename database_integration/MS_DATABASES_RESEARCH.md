@@ -16,6 +16,81 @@
 
 ---
 
+## 🏆 CRITICAL: ML Benchmark Dataset
+
+### MassSpecGym (NeurIPS 2024 Spotlight) ⭐⭐⭐⭐⭐
+
+**URL**: https://polarishub.io/datasets/roman-bushuiev/massspecgym  
+**GitHub**: https://github.com/pluskal-lab/MassSpecGym  
+**Hugging Face**: https://huggingface.co/datasets/roman-bushuiev/MassSpecGym  
+**Paper**: https://arxiv.org/abs/2410.23326 (NeurIPS 2024 Spotlight)  
+
+**Records**: **231,104 high-quality MS/MS spectra** from 29K molecules  
+**License**: MIT  
+**Access**: Free, open access via Hugging Face datasets API  
+
+**Data Sources Combined**:
+- GNPS: 322K spectra (104K high-quality)
+- MoNA: 98K spectra (62K high-quality)  
+- MassBank: 62K spectra (58K high-quality)
+- In-house measurements
+
+**Key Features**:
+- **Largest publicly available curated MS/MS dataset**
+- Pre-defined train/val/test splits for ML
+- Three benchmark challenges:
+  1. **De novo molecule generation** (spectrum → structure)
+  2. **Molecule retrieval** (spectrum → ranked candidates)
+  3. **Spectrum simulation** (structure → spectrum)
+- PyTorch/Lightning infrastructure
+- Leaderboard at https://massspecgym.onrender.com
+- Standardized evaluation metrics
+
+**Data Variables**:
+| Variable | Description |
+|----------|-------------|
+| `mzs` | Array of m/z values |
+| `intensities` | Array of intensities |
+| `smiles` | SMILES string |
+| `inchikey` | 2D InChI key |
+| `formula` | Molecular formula |
+| `precursor_mz` | Precursor m/z |
+| `adduct` | Ionization adduct ([M+H]+, etc.) |
+| `instrument_type` | Orbitrap, etc. |
+| `collision_energy` | CID energy |
+
+**Integration Priority**: ⭐⭐⭐⭐⭐ **CRITICAL**  
+**Reason**: 
+- Gold-standard ML benchmark for MS
+- NeurIPS 2024 Spotlight paper
+- Combines MassBank, MoNA, GNPS into one curated dataset
+- Pre-defined splits eliminate data leakage
+- Can validate QCxMS2 predictions against state-of-the-art ML models
+
+**Usage Example**:
+```python
+# Via Hugging Face datasets
+from datasets import load_dataset
+dataset = load_dataset("roman-bushuiev/MassSpecGym")
+
+# Via MassSpecGym Python package
+pip install massspecgym
+from massspecgym.utils import load_massspecgym
+df = load_massspecgym()
+```
+
+**Citation**:
+```bibtex
+@inproceedings{bushuiev2024massspecgym,
+  title={MassSpecGym: A benchmark for the discovery and identification of molecules},
+  author={Bushuiev, Roman and others},
+  booktitle={NeurIPS},
+  year={2024}
+}
+```
+
+---
+
 ## High Priority - Should Implement
 
 ### 1. mzCloud (HighChem)
@@ -202,6 +277,9 @@
 ---
 
 ## Summary: Recommended Implementation Order
+
+### Phase 0 (CRITICAL - Do First!)
+0. **MassSpecGym** - NeurIPS 2024 benchmark, 231K curated spectra, Hugging Face API
 
 ### Phase 1 (Immediate)
 1. **mzCloud** - Large dataset, MSn trees, good API
