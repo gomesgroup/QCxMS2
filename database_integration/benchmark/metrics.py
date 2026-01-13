@@ -731,3 +731,313 @@ def _get_quality_recommendation(quality_tier: str, metrics: SimilarityMetrics) -
         "no_match": "No significant match found.",
     }
     return recommendations.get(quality_tier, "Unknown quality tier.")
+
+
+# ============================================================================
+# Specialized Metrics for QCxMS2 Validation
+# ============================================================================
+
+def calculate_fragmentation_pattern_match(
+    query_peaks: List[Peak],
+    reference_peaks: List[Peak],
+    mz_tolerance: float = 0.5,
+    top_n: int = 10,
+) -> float:
+    """
+    Calculate fragmentation pattern match focusing on top peaks.
+    
+    This metric is designed for comparing calculated (QCxMS2) spectra with
+    experimental data. It focuses on whether the calculation correctly
+    predicts the PRESENCE of major fragments, with less emphasis on exact
+    intensity ratios (which vary with experimental conditions).
+    
+    Algorithm:
+    1. Identify top-N peaks by intensity in both spectra
+    2. Count how many of reference's top-N peaks are found in query
+    3. Weight matches by reference intensity rank
+    
+    Args:
+        query_peaks: Query spectrum peaks (calculated)
+        reference_peaks: Reference spectrum peaks (experimental)
+        mz_tolerance: m/z tolerance for peak matching (Da)
+        top_n: Number of top peaks to consider
+    
+    Returns:
+        Pattern match score (0-1)
+    
+    Notes:
+        - Score of 1.0 means all top-N reference peaks were found in query
+        - This metric is asymmetric: it asks "does the calculation predict
+          the observed fragments?" not "are all calculated fragments observed?"
+    """
+    if not query_peaks or not reference_peaks:
+        return 0.0
+    
+    # Sort reference peaks by intensity (descending)
+    ref_sorted = sorted(reference_peaks, key=lambda p: p.intensity, reverse=True)
+    top_ref = ref_sorted[:top_n]
+    
+    # Check how many top reference peaks are found in query
+    matched = 0
+    total_weight = 0
+    
+    for rank, ref_peak in enumerate(top_ref):
+        # Weight by rank (first peak = top_n points, last = 1 point)
+        weight = top_n - rank
+        total_weight += weight
+        
+        # Check if this reference peak is found in query
+        for q_peak in query_peaks:
+            if abs(q_peak.mz - ref_peak.mz) <= mz_tolerance:
+                matched += weight
+                break
+    
+    return matched / total_weight if total_weight > 0 else 0.0
+
+
+def calculate_mass_accuracy_score(
+    query_peaks: List[Peak],
+    reference_peaks: List[Peak],
+    mz_tolerance: float = 0.5,
+) -> Tuple[float, List[float]]:
+    """
+    Calculate mass accuracy score and report m/z errors.
+    
+    This metric specifically assesses how accurately QCxMS2 predicts
+    m/z values. Useful for validating computational methodology.
+    
+    Args:
+        query_peaks: Query spectrum peaks (calculated)
+        reference_peaks: Reference spectrum peaks (experimental)
+        mz_tolerance: m/z tolerance for peak matching (Da)
+    
+    Returns:
+        Tuple of (accuracy_score, list_of_mz_errors)
+        - accuracy_score: Mean inverse error (higher = better accuracy)
+        - list_of_mz_errors: Actual m/z differences for matched peaks
+    """
+    if not query_peaks or not reference_peaks:
+        return 0.0, []
+    
+    matched_pairs = match_peaks(query_peaks, reference_peaks, mz_tolerance)
+    
+    if not matched_pairs:
+        return 0.0, []
+    
+    mz_errors = [abs(q.mz - r.mz) for q, r, _ in matched_pairs]
+    
+    # Calculate accuracy score as mean inverse error
+    # Use 0.001 as floor to avoid division by zero
+    mean_error = sum(mz_errors) / len(mz_errors)
+    accuracy_score = 1.0 / (1.0 + mean_error * 100)  # Scale: 0.01 Da error -> 0.5 score
+    
+    return accuracy_score, mz_errors
+
+
+def calculate_intensity_rank_correlation(
+    query_peaks: List[Peak],
+    reference_peaks: List[Peak],
+    mz_tolerance: float = 0.5,
+) -> float:
+    """
+    Calculate Spearman rank correlation of matched peak intensities.
+    
+    This metric checks if the RELATIVE ordering of fragment intensities
+    matches between calculated and experimental spectra, even if the
+    absolute intensity ratios differ.
+    
+    Args:
+        query_peaks: Query spectrum peaks (calculated)
+        reference_peaks: Reference spectrum peaks (experimental)
+        mz_tolerance: m/z tolerance for peak matching (Da)
+    
+    Returns:
+        Rank correlation score (-1 to 1, scaled to 0-1)
+    
+    Notes:
+        - Score of 1.0 means perfect rank agreement
+        - Score of 0.5 means no correlation
+        - This is useful when intensity ratios differ but relative
+          ordering should be preserved
+    """
+    if not query_peaks or not reference_peaks:
+        return 0.0
+    
+    matched_pairs = match_peaks(query_peaks, reference_peaks, mz_tolerance)
+    
+    if len(matched_pairs) < 3:
+        return 0.0  # Need at least 3 points for meaningful correlation
+    
+    # Get intensity ranks
+    query_intensities = [q.intensity for q, _, _ in matched_pairs]
+    ref_intensities = [r.intensity for _, r, _ in matched_pairs]
+    
+    # Calculate ranks
+    def get_ranks(values):
+        sorted_idx = sorted(range(len(values)), key=lambda i: values[i])
+        ranks = [0] * len(values)
+        for rank, idx in enumerate(sorted_idx):
+            ranks[idx] = rank + 1
+        return ranks
+    
+    q_ranks = get_ranks(query_intensities)
+    r_ranks = get_ranks(ref_intensities)
+    
+    # Spearman rank correlation
+    n = len(q_ranks)
+    d_squared_sum = sum((q - r) ** 2 for q, r in zip(q_ranks, r_ranks))
+    rho = 1 - (6 * d_squared_sum) / (n * (n ** 2 - 1))
+    
+    # Scale from [-1, 1] to [0, 1]
+    return (rho + 1) / 2
+
+
+@dataclass
+class QCxMS2ValidationMetrics:
+    """
+    Specialized metrics for validating QCxMS2 calculations against experiment.
+    
+    These metrics are designed to address the known characteristics of
+    computational mass spectra:
+    - Excellent m/z accuracy (usually < 0.01 Da)
+    - Variable intensity ratios (due to sampling statistics)
+    - Possible prediction of minor peaks not observed experimentally
+    """
+    
+    # Standard metrics
+    cosine_similarity: float = 0.0
+    weighted_cosine: float = 0.0
+    
+    # QCxMS2-specific metrics
+    fragmentation_pattern_match: float = 0.0  # Top-N peak detection
+    mass_accuracy_score: float = 0.0          # m/z precision
+    intensity_rank_correlation: float = 0.0   # Relative ordering
+    
+    # Peak matching stats
+    matched_peaks: int = 0
+    query_peaks: int = 0
+    reference_peaks: int = 0
+    mean_mz_error: float = 0.0
+    max_mz_error: float = 0.0
+    
+    # Derived scores
+    @property
+    def overall_validation_score(self) -> float:
+        """
+        Combined validation score emphasizing fragmentation pattern match.
+        
+        Weights:
+        - 40% Fragmentation pattern match (did we find the right fragments?)
+        - 30% Mass accuracy (are the m/z values correct?)
+        - 20% Intensity rank correlation (is the relative ordering right?)
+        - 10% Cosine similarity (traditional metric)
+        """
+        return (
+            0.40 * self.fragmentation_pattern_match +
+            0.30 * self.mass_accuracy_score +
+            0.20 * self.intensity_rank_correlation +
+            0.10 * self.cosine_similarity
+        )
+    
+    @property
+    def quality_assessment(self) -> str:
+        """Assess validation quality."""
+        score = self.overall_validation_score
+        if score >= 0.85:
+            return "Excellent - QCxMS2 accurately predicts fragmentation"
+        elif score >= 0.70:
+            return "Good - Major fragmentation pathways captured"
+        elif score >= 0.50:
+            return "Moderate - Some fragmentation pathways captured"
+        else:
+            return "Poor - Significant disagreement with experiment"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "cosine_similarity": self.cosine_similarity,
+            "weighted_cosine": self.weighted_cosine,
+            "fragmentation_pattern_match": self.fragmentation_pattern_match,
+            "mass_accuracy_score": self.mass_accuracy_score,
+            "intensity_rank_correlation": self.intensity_rank_correlation,
+            "overall_validation_score": self.overall_validation_score,
+            "quality_assessment": self.quality_assessment,
+            "matched_peaks": self.matched_peaks,
+            "query_peaks": self.query_peaks,
+            "reference_peaks": self.reference_peaks,
+            "mean_mz_error": self.mean_mz_error,
+            "max_mz_error": self.max_mz_error,
+        }
+
+
+def calculate_qcxms2_validation_metrics(
+    calculated_peaks: List[Peak],
+    experimental_peaks: List[Peak],
+    mz_tolerance: float = 0.5,
+    top_n_peaks: int = 10,
+) -> QCxMS2ValidationMetrics:
+    """
+    Calculate all QCxMS2 validation metrics.
+    
+    This is the main function for validating QCxMS2 calculations against
+    experimental mass spectra.
+    
+    Args:
+        calculated_peaks: Peaks from QCxMS2 calculation
+        experimental_peaks: Peaks from experimental spectrum (MassBank, etc.)
+        mz_tolerance: m/z tolerance for peak matching (Da)
+        top_n_peaks: Number of top peaks for pattern matching
+    
+    Returns:
+        QCxMS2ValidationMetrics with all metrics calculated
+    
+    Example:
+        >>> from database_integration.benchmark.metrics import (
+        ...     calculate_qcxms2_validation_metrics, Peak
+        ... )
+        >>> calc = [Peak(78.05, 100), Peak(39.02, 40), Peak(51.02, 15)]
+        >>> expt = [Peak(78.05, 100), Peak(51.02, 20), Peak(39.02, 10)]
+        >>> metrics = calculate_qcxms2_validation_metrics(calc, expt)
+        >>> print(f"Validation: {metrics.overall_validation_score:.1%}")
+    """
+    if not calculated_peaks or not experimental_peaks:
+        return QCxMS2ValidationMetrics(
+            query_peaks=len(calculated_peaks) if calculated_peaks else 0,
+            reference_peaks=len(experimental_peaks) if experimental_peaks else 0,
+        )
+    
+    # Standard metrics
+    matched_pairs = match_peaks(calculated_peaks, experimental_peaks, mz_tolerance)
+    cosine = calculate_cosine_similarity(
+        calculated_peaks, experimental_peaks, mz_tolerance, matched_pairs
+    )
+    weighted = calculate_weighted_cosine(
+        calculated_peaks, experimental_peaks, mz_tolerance, 
+        mz_power=0.0, intensity_power=0.5, matched_pairs=matched_pairs
+    )
+    
+    # QCxMS2-specific metrics
+    pattern_match = calculate_fragmentation_pattern_match(
+        calculated_peaks, experimental_peaks, mz_tolerance, top_n_peaks
+    )
+    
+    accuracy, mz_errors = calculate_mass_accuracy_score(
+        calculated_peaks, experimental_peaks, mz_tolerance
+    )
+    
+    rank_correlation = calculate_intensity_rank_correlation(
+        calculated_peaks, experimental_peaks, mz_tolerance
+    )
+    
+    return QCxMS2ValidationMetrics(
+        cosine_similarity=cosine,
+        weighted_cosine=weighted,
+        fragmentation_pattern_match=pattern_match,
+        mass_accuracy_score=accuracy,
+        intensity_rank_correlation=rank_correlation,
+        matched_peaks=len(matched_pairs),
+        query_peaks=len(calculated_peaks),
+        reference_peaks=len(experimental_peaks),
+        mean_mz_error=sum(mz_errors) / len(mz_errors) if mz_errors else 0.0,
+        max_mz_error=max(mz_errors) if mz_errors else 0.0,
+    )

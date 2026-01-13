@@ -50,10 +50,16 @@ from .benchmark_suite import (
 )
 from .metrics import (
     MetricsCalculator,
+    Peak,
+    QCxMS2ValidationMetrics,
     SimilarityMetrics,
     StatisticalAnalysis,
     calculate_cosine_similarity,
     calculate_dot_product,
+    calculate_fragmentation_pattern_match,
+    calculate_intensity_rank_correlation,
+    calculate_mass_accuracy_score,
+    calculate_qcxms2_validation_metrics,
     calculate_spectral_entropy_similarity,
     calculate_weighted_cosine,
 )
@@ -66,11 +72,17 @@ __all__ = [
     "MoleculeBenchmark",
     # Metrics
     "MetricsCalculator",
+    "Peak",
+    "QCxMS2ValidationMetrics",
     "SimilarityMetrics",
     "StatisticalAnalysis",
     # Functions
     "calculate_cosine_similarity",
     "calculate_dot_product",
+    "calculate_fragmentation_pattern_match",
+    "calculate_intensity_rank_correlation",
+    "calculate_mass_accuracy_score",
+    "calculate_qcxms2_validation_metrics",
     "calculate_spectral_entropy_similarity",
     "calculate_weighted_cosine",
 ]
