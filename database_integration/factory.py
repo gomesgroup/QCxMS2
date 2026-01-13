@@ -4,7 +4,13 @@ Factory functions for creating MS database connectors.
 
 from .base import MSDatabaseConnector
 from .config import DatabaseConfig
-from .connectors import MassBankConnector, MoNAConnector, NISTMSConnector, SDBSConnector
+from .connectors import (
+    MassBankConnector,
+    MassSpecGymConnector,
+    MoNAConnector,
+    NISTMSConnector,
+    SDBSConnector,
+)
 from .enums import DatabaseType
 
 
@@ -39,6 +45,8 @@ def create_ms_connector(
         return NISTMSConnector(config)
     elif db_type == DatabaseType.SDBS:
         return SDBSConnector(config)
+    elif db_type == DatabaseType.MASSSPECGYM:
+        return MassSpecGymConnector(config)
     else:
         raise ValueError(f"Unsupported database type: {db_type}")
 
@@ -97,3 +105,26 @@ def create_sdbs_connector(**config_params) -> SDBSConnector:
     """
     config = DatabaseConfig.for_sdbs(**config_params)
     return SDBSConnector(config)
+
+
+def create_massspecgym_connector(**config_params) -> MassSpecGymConnector:
+    """
+    Create MassSpecGym connector for NeurIPS 2024 benchmark dataset.
+
+    MassSpecGym contains 231K curated MS/MS spectra from 29K molecules.
+    The dataset is downloaded from Hugging Face on first access (~2GB).
+
+    Args:
+        **config_params: Configuration parameters
+            - splits: List of splits to load (default: ["train", "val", "test"])
+
+    Returns:
+        Initialized MassSpecGym connector
+
+    Example:
+        >>> connector = create_massspecgym_connector()
+        >>> stats = connector.get_dataset_statistics()
+        >>> print(f"Total spectra: {stats['total_spectra']}")
+    """
+    config = DatabaseConfig.for_massspecgym(**config_params)
+    return MassSpecGymConnector(config)

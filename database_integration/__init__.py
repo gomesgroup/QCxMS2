@@ -8,6 +8,7 @@ Architecture inspired by Explorer's database_integration system.
 
 Supported Databases:
 - MassBank (massbank.eu): 40K+ mass spectra with REST API
+- MassSpecGym: NeurIPS 2024 benchmark with 231K curated MS/MS spectra
 - SDBS (sdbs.db.aist.go.jp): IR, NMR, MS, Raman for organic compounds
 - NIST MS (webbook.nist.gov): NIST Chemistry WebBook mass spectra
 - MoNA (mona.fiehnlab.ucdavis.edu): MassBank of North America
@@ -17,6 +18,9 @@ Usage:
     
     # Create connector
     massbank = create_ms_connector(DatabaseType.MASSBANK)
+    
+    # Or use MassSpecGym (231K curated spectra, downloaded via Hugging Face)
+    massspecgym = create_ms_connector(DatabaseType.MASSSPECGYM)
     
     # Search for spectrum by formula
     from qcxms2.database_integration import SpectrumSearchCriteria
@@ -32,6 +36,7 @@ from .base import MSDatabaseConnector, ExperimentalSpectrum
 from .config import DatabaseConfig
 from .connectors import (
     MassBankConnector,
+    MassSpecGymConnector,
     MoNAConnector,
     NISTMSConnector,
     SDBSConnector,
@@ -43,11 +48,11 @@ from .data_classes import (
     SpectrumComparisonResult,
 )
 from .enums import DatabaseType, IonizationMode, SpectrumType
-from .factory import create_ms_connector
+from .factory import create_ms_connector, create_massspecgym_connector
 from .search_criteria import SpectrumSearchCriteria
 from .utils import compare_spectra, parse_spectrum_file
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     # Base classes
@@ -57,6 +62,7 @@ __all__ = [
     "DatabaseConfig",
     # Connectors
     "MassBankConnector",
+    "MassSpecGymConnector",
     "SDBSConnector",
     "NISTMSConnector",
     "MoNAConnector",
@@ -71,6 +77,7 @@ __all__ = [
     "SpectrumType",
     # Factory
     "create_ms_connector",
+    "create_massspecgym_connector",
     # Search
     "SpectrumSearchCriteria",
     # Utils

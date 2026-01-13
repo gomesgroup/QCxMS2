@@ -4,6 +4,10 @@
 requests>=2.31.0      # HTTP client for API access
 numpy>=1.24.0         # Numerical computations for spectrum comparison
 
+# MassSpecGym (NeurIPS 2024 benchmark - 231K curated MS/MS spectra)
+datasets>=2.14.0      # Hugging Face datasets for MassSpecGym access
+huggingface_hub>=0.17.0  # HF Hub for dataset download
+
 # Optional dependencies for enhanced functionality
 # (uncomment if needed)
 

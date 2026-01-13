@@ -18,6 +18,7 @@ class DatabaseType(Enum):
     METLIN = "metlin"  # METLIN Metabolomics Database
     HMDB = "hmdb"  # Human Metabolome Database
     LIPIDMAPS = "lipidmaps"  # LIPID MAPS Structure Database
+    MASSSPECGYM = "massspecgym"  # MassSpecGym NeurIPS 2024 benchmark - Hugging Face
     CUSTOM = "custom"  # Custom/local database
 
 

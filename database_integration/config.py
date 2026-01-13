@@ -123,3 +123,25 @@ class DatabaseConfig:
         }
         defaults.update(kwargs)
         return cls(**defaults)
+
+    @classmethod
+    def for_massspecgym(cls, **kwargs) -> "DatabaseConfig":
+        """
+        Create configuration for MassSpecGym (NeurIPS 2024 benchmark).
+
+        MassSpecGym is a local dataset loaded via Hugging Face datasets library,
+        so it doesn't have a base_url or rate limiting.
+        """
+        defaults = {
+            "database_type": DatabaseType.MASSSPECGYM,
+            "name": "massspecgym",
+            "base_url": None,  # Local dataset, no API
+            "rate_limit_per_second": 0,  # No rate limiting needed
+            "cache_enabled": True,  # HF datasets handles caching
+            "additional_params": {
+                "splits": ["train", "val", "test"],  # Which splits to load
+                "hf_dataset": "roman-bushuiev/MassSpecGym",
+            },
+        }
+        defaults.update(kwargs)
+        return cls(**defaults)
