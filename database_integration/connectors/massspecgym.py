@@ -283,8 +283,22 @@ class MassSpecGymConnector(MSDatabaseConnector):
         for idx in range(max_scan):
             try:
                 record = self._dataset[idx]
-                ref_mzs = record.get("mzs", [])
-                ref_intensities = record.get("intensities", [])
+                ref_mzs_raw = record.get("mzs", "")
+                ref_intensities_raw = record.get("intensities", "")
+
+                if not ref_mzs_raw or not ref_intensities_raw:
+                    continue
+
+                # Parse comma-separated strings to lists of floats
+                if isinstance(ref_mzs_raw, str):
+                    ref_mzs = [float(x) for x in ref_mzs_raw.split(",") if x.strip()]
+                else:
+                    ref_mzs = list(ref_mzs_raw)
+
+                if isinstance(ref_intensities_raw, str):
+                    ref_intensities = [float(x) for x in ref_intensities_raw.split(",") if x.strip()]
+                else:
+                    ref_intensities = list(ref_intensities_raw)
 
                 if not ref_mzs or not ref_intensities:
                     continue
@@ -409,9 +423,23 @@ class MassSpecGymConnector(MSDatabaseConnector):
     def _parse_record(self, record: Dict[str, Any], idx: int) -> Optional[ExperimentalSpectrum]:
         """Parse a MassSpecGym record into ExperimentalSpectrum."""
         try:
-            # Extract peaks
-            mzs = record.get("mzs", [])
-            intensities = record.get("intensities", [])
+            # Extract peaks - MassSpecGym stores mzs/intensities as comma-separated strings
+            mzs_raw = record.get("mzs", "")
+            intensities_raw = record.get("intensities", "")
+
+            if not mzs_raw or not intensities_raw:
+                return None
+
+            # Parse comma-separated strings to lists of floats
+            if isinstance(mzs_raw, str):
+                mzs = [float(x) for x in mzs_raw.split(",") if x.strip()]
+            else:
+                mzs = list(mzs_raw)
+
+            if isinstance(intensities_raw, str):
+                intensities = [float(x) for x in intensities_raw.split(",") if x.strip()]
+            else:
+                intensities = list(intensities_raw)
 
             if not mzs or not intensities:
                 return None

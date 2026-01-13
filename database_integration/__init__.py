@@ -30,6 +30,12 @@ Usage:
     # Compare with experimental data
     from qcxms2.database_integration import compare_spectra
     similarity = compare_spectra(calculated_peaks, experimental_peaks)
+    
+    # Benchmark against MassSpecGym (231K spectra)
+    from qcxms2.database_integration.benchmark import QCxMS2Benchmark, BenchmarkConfig
+    benchmark = QCxMS2Benchmark(BenchmarkConfig(similarity_threshold=0.7))
+    benchmark.add_molecule(smiles="CCO", formula="C2H6O", inchikey="...", calculated_spectrum=[...])
+    results = benchmark.run_benchmark()
 """
 
 from .base import MSDatabaseConnector, ExperimentalSpectrum
@@ -52,7 +58,25 @@ from .factory import create_ms_connector, create_massspecgym_connector
 from .search_criteria import SpectrumSearchCriteria
 from .utils import compare_spectra, parse_spectrum_file
 
-__version__ = "1.1.0"
+# QCxMS2 output parsers
+from .parsers import (
+    QCxMS2Result,
+    QCxMS2FragmentInfo,
+    parse_qcxms2_results,
+    parse_qcxms2_spectrum,
+    parse_qcxms2_allpeaks,
+    parse_qcxms2_output_dir,
+)
+
+# Benchmark framework
+from .benchmark import (
+    QCxMS2Benchmark,
+    BenchmarkConfig,
+    BenchmarkResult,
+    MoleculeBenchmark,
+)
+
+__version__ = "1.2.0"
 
 __all__ = [
     # Base classes
@@ -83,4 +107,9 @@ __all__ = [
     # Utils
     "compare_spectra",
     "parse_spectrum_file",
+    # Benchmark
+    "QCxMS2Benchmark",
+    "BenchmarkConfig",
+    "BenchmarkResult",
+    "MoleculeBenchmark",
 ]
