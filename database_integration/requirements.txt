@@ -1,0 +1,14 @@
+# QCxMS2 Database Integration Requirements
+
+# Core dependencies
+requests>=2.31.0      # HTTP client for API access
+numpy>=1.24.0         # Numerical computations for spectrum comparison
+
+# Optional dependencies for enhanced functionality
+# (uncomment if needed)
+
+# pandas>=2.0.0       # Data manipulation (for batch processing)
+# matplotlib>=3.7.0   # Plotting spectra comparisons
+# scipy>=1.10.0       # Advanced similarity metrics
+# lxml>=4.9.0         # Faster HTML parsing (for web scraping)
+# beautifulsoup4>=4.12.0  # HTML parsing (for NIST/SDBS scraping)
