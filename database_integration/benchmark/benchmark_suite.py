@@ -264,17 +264,37 @@ class QCxMS2Benchmark:
             return True
         
         try:
-            # Import from parent module
-            import sys
-            from pathlib import Path
+            # Try multiple import strategies
+            MassSpecGymConnector = None
+            DatabaseConfig = None
             
-            # Add parent directory to path if needed
-            parent_dir = str(Path(__file__).parent.parent)
-            if parent_dir not in sys.path:
-                sys.path.insert(0, parent_dir)
+            # Strategy 1: Direct relative import (when used as part of database_integration package)
+            try:
+                from ..connectors.massspecgym import MassSpecGymConnector
+                from ..config import DatabaseConfig
+            except (ImportError, ValueError):
+                pass
             
-            from connectors.massspecgym import MassSpecGymConnector
-            from config import DatabaseConfig
+            # Strategy 2: Absolute import (when database_integration is in sys.path)
+            if MassSpecGymConnector is None:
+                try:
+                    from database_integration.connectors.massspecgym import MassSpecGymConnector
+                    from database_integration.config import DatabaseConfig
+                except ImportError:
+                    pass
+            
+            # Strategy 3: Add parent to path and import directly
+            if MassSpecGymConnector is None:
+                import sys
+                from pathlib import Path
+                parent_dir = str(Path(__file__).parent.parent)
+                if parent_dir not in sys.path:
+                    sys.path.insert(0, parent_dir)
+                from connectors.massspecgym import MassSpecGymConnector
+                from config import DatabaseConfig
+            
+            if MassSpecGymConnector is None or DatabaseConfig is None:
+                raise ImportError("Could not import MassSpecGymConnector")
             
             # Create connector with specified splits
             config = DatabaseConfig.for_massspecgym()
@@ -596,7 +616,14 @@ class QCxMS2Benchmark:
     
     def _find_experimental_spectra(self, mol: Dict[str, Any]) -> List:
         """Find experimental spectra for a molecule from MassSpecGym."""
-        from search_criteria import SpectrumSearchCriteria
+        # Import with multiple strategies for robustness
+        try:
+            from ..search_criteria import SpectrumSearchCriteria
+        except (ImportError, ValueError):
+            try:
+                from database_integration.search_criteria import SpectrumSearchCriteria
+            except ImportError:
+                from search_criteria import SpectrumSearchCriteria
         
         # Try InChI key first (most specific)
         if mol["inchikey"]:
