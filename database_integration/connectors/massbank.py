@@ -1,12 +1,15 @@
 """
-MassBank connector for accessing MassBank EU database.
+MassBank connector for accessing MassBank EU database (MassBank 3 API).
 
-MassBank is an open-access mass spectra database with 40K+ spectra.
-API Documentation: https://github.com/MassBank/MassBank-web/blob/main/Documentation/MassBankRecordFormat.md
+MassBank is an open-access mass spectra database with 100K+ spectra.
+API Documentation: https://massbank.eu/MassBank-api/ui/
 """
 
 import logging
-from typing import List, Optional
+import time
+from typing import Any, Dict, List, Optional
+
+import requests
 
 from ..base import MSDatabaseConnector
 from ..config import DatabaseConfig
@@ -16,16 +19,21 @@ from ..search_criteria import SpectrumSearchCriteria
 
 logger = logging.getLogger(__name__)
 
+# MassBank 3 API base URL
+MASSBANK3_API_URL = "https://massbank.eu/MassBank-api"
+
 
 class MassBankConnector(MSDatabaseConnector):
     """
-    Connector for MassBank EU database.
+    Connector for MassBank EU database (MassBank 3 API).
 
     Features:
-    - REST API access to 40K+ mass spectra
-    - Search by formula, exact mass, InChI, peaks
-    - Supports EI, ESI+, ESI-, and other ionization modes
+    - REST API access to 100K+ mass spectra
+    - Search by formula, exact mass, InChI, InChI key, peaks
+    - Supports EI, ESI+, ESI-, CI, and other ionization modes
     - Free access, no API key required
+    
+    Note: This connector uses the MassBank 3 API (2024+), not the legacy API.
     """
 
     def __init__(self, config: Optional[DatabaseConfig] = None):
@@ -37,14 +45,21 @@ class MassBankConnector(MSDatabaseConnector):
         """
         if config is None:
             config = DatabaseConfig.for_massbank()
+        
+        # Override base_url to use MassBank 3 API
+        config.base_url = MASSBANK3_API_URL
         super().__init__(config)
 
     def test_connection(self) -> bool:
         """Test connection to MassBank API."""
         try:
-            # Try to get database info endpoint
-            result = self._make_request(f"{self.config.base_url}/info")
-            return result.get("success", False)
+            # Try to get a simple record list (limit 1)
+            response = requests.get(
+                f"{self.config.base_url}/records",
+                params={"formula": "C6H6"},  # Benzene as test
+                timeout=self.config.timeout,
+            )
+            return response.status_code == 200 and isinstance(response.json(), list)
         except Exception as e:
             logger.error(f"MassBank connection test failed: {e}")
             return False
@@ -61,50 +76,88 @@ class MassBankConnector(MSDatabaseConnector):
         """
         criteria.validate()
 
-        # Determine search endpoint based on criteria
+        # Build query parameters
+        params = {}
+        
         if criteria.formula:
-            return self._search_by_formula(criteria)
-        elif criteria.exact_mass is not None:
-            return self._search_by_exact_mass(criteria)
-        elif criteria.inchi:
-            return self._search_by_inchi(criteria)
-        elif criteria.inchi_key:
-            return self._search_by_inchi_key(criteria)
-        elif criteria.peaks:
-            return self._search_by_peaks(criteria)
-        else:
+            params["formula"] = criteria.formula
+        
+        if criteria.inchi_key:
+            params["inchi_key"] = criteria.inchi_key
+        
+        if criteria.inchi:
+            params["inchi"] = criteria.inchi
+        
+        if criteria.exact_mass is not None:
+            params["exact_mass"] = criteria.exact_mass
+            params["mass_tolerance"] = criteria.exact_mass_tolerance
+        
+        if criteria.ionization_mode:
+            params["ion_mode"] = self._convert_ionization_mode(criteria.ionization_mode)
+        
+        # Peak list search
+        if criteria.peaks:
+            # Format as "mz1,mz2,mz3" 
+            peak_mzs = ",".join([str(mz) for mz, _ in criteria.peaks])
+            params["peaks"] = peak_mzs
+        
+        if not params:
             return MSSearchResult(
                 success=False,
                 error_message="MassBank requires formula, exact mass, InChI, InChI Key, or peaks for search",
                 source="MassBank EU",
             )
 
-    def _search_by_formula(self, criteria: SpectrumSearchCriteria) -> MSSearchResult:
-        """Search by molecular formula."""
-        url = f"{self.config.base_url}/searchSpectrum"
-
-        params = {
-            "formula": criteria.formula,
-            "tolerance": criteria.exact_mass_tolerance,
-        }
-
-        if criteria.ionization_mode:
-            params["ionMode"] = self._convert_ionization_mode(criteria.ionization_mode)
-
-        if criteria.max_results:
-            params["maxResults"] = criteria.max_results
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
+        # Make API request
+        start_time = time.time()
+        try:
+            response = requests.get(
+                f"{self.config.base_url}/records",
+                params=params,
+                timeout=self.config.timeout,
+                headers={"User-Agent": self.config.user_agent},
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"MassBank API request failed: {e}")
             return MSSearchResult(
                 success=False,
-                error_message=response.get("error_message", "Unknown error"),
+                error_message=str(e),
+                source="MassBank EU",
+            )
+        except ValueError as e:
+            logger.error(f"Failed to parse MassBank response: {e}")
+            return MSSearchResult(
+                success=False,
+                error_message=f"Invalid JSON response: {e}",
                 source="MassBank EU",
             )
 
-        # Parse response and extract spectra
-        spectra = self._parse_search_results(response["data"])
+        request_time = time.time() - start_time
+
+        # Parse response
+        if not isinstance(data, list):
+            return MSSearchResult(
+                success=False,
+                error_message=f"Unexpected response type: {type(data)}",
+                source="MassBank EU",
+            )
+
+        # Convert to ExperimentalSpectrum objects
+        spectra = []
+        for record in data:
+            try:
+                spectrum = self._parse_massbank_record(record)
+                if spectrum:
+                    spectra.append(spectrum)
+            except Exception as e:
+                logger.warning(f"Failed to parse MassBank record: {e}")
+                continue
+
+        # Apply max_results limit
+        if criteria.max_results and len(spectra) > criteria.max_results:
+            spectra = spectra[:criteria.max_results]
 
         return MSSearchResult(
             success=True,
@@ -112,144 +165,8 @@ class MassBankConnector(MSDatabaseConnector):
             total_results=len(spectra),
             source="MassBank EU",
             citation=self.get_citation(),
-            request_time=response.get("request_time", 0.0),
-            cached=response.get("cached", False),
-        )
-
-    def _search_by_exact_mass(self, criteria: SpectrumSearchCriteria) -> MSSearchResult:
-        """Search by exact mass."""
-        url = f"{self.config.base_url}/searchSpectrum"
-
-        params = {
-            "exactMass": criteria.exact_mass,
-            "tolerance": criteria.exact_mass_tolerance,
-        }
-
-        if criteria.ionization_mode:
-            params["ionMode"] = self._convert_ionization_mode(criteria.ionization_mode)
-
-        if criteria.max_results:
-            params["maxResults"] = criteria.max_results
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
-            return MSSearchResult(
-                success=False,
-                error_message=response.get("error_message", "Unknown error"),
-                source="MassBank EU",
-            )
-
-        spectra = self._parse_search_results(response["data"])
-
-        return MSSearchResult(
-            success=True,
-            spectra=spectra,
-            total_results=len(spectra),
-            source="MassBank EU",
-            citation=self.get_citation(),
-            request_time=response.get("request_time", 0.0),
-            cached=response.get("cached", False),
-        )
-
-    def _search_by_inchi(self, criteria: SpectrumSearchCriteria) -> MSSearchResult:
-        """Search by InChI."""
-        url = f"{self.config.base_url}/searchSpectrum"
-
-        params = {"inchi": criteria.inchi}
-
-        if criteria.max_results:
-            params["maxResults"] = criteria.max_results
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
-            return MSSearchResult(
-                success=False,
-                error_message=response.get("error_message", "Unknown error"),
-                source="MassBank EU",
-            )
-
-        spectra = self._parse_search_results(response["data"])
-
-        return MSSearchResult(
-            success=True,
-            spectra=spectra,
-            total_results=len(spectra),
-            source="MassBank EU",
-            citation=self.get_citation(),
-            request_time=response.get("request_time", 0.0),
-            cached=response.get("cached", False),
-        )
-
-    def _search_by_inchi_key(self, criteria: SpectrumSearchCriteria) -> MSSearchResult:
-        """Search by InChI Key."""
-        url = f"{self.config.base_url}/searchSpectrum"
-
-        params = {"inchikey": criteria.inchi_key}
-
-        if criteria.max_results:
-            params["maxResults"] = criteria.max_results
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
-            return MSSearchResult(
-                success=False,
-                error_message=response.get("error_message", "Unknown error"),
-                source="MassBank EU",
-            )
-
-        spectra = self._parse_search_results(response["data"])
-
-        return MSSearchResult(
-            success=True,
-            spectra=spectra,
-            total_results=len(spectra),
-            source="MassBank EU",
-            citation=self.get_citation(),
-            request_time=response.get("request_time", 0.0),
-            cached=response.get("cached", False),
-        )
-
-    def _search_by_peaks(self, criteria: SpectrumSearchCriteria) -> MSSearchResult:
-        """Search by peak list (similarity search)."""
-        url = f"{self.config.base_url}/searchSpectrum"
-
-        # Format peaks as "mz1:intensity1 mz2:intensity2 ..."
-        peak_str = " ".join([f"{mz}:{intensity}" for mz, intensity in criteria.peaks])
-
-        params = {
-            "peaks": peak_str,
-            "tolerance": criteria.mz_tolerance,
-            "cutoff": criteria.similarity_threshold * 100,  # Convert to percentage
-        }
-
-        if criteria.ionization_mode:
-            params["ionMode"] = self._convert_ionization_mode(criteria.ionization_mode)
-
-        if criteria.max_results:
-            params["maxResults"] = criteria.max_results
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
-            return MSSearchResult(
-                success=False,
-                error_message=response.get("error_message", "Unknown error"),
-                source="MassBank EU",
-            )
-
-        spectra = self._parse_search_results(response["data"])
-
-        return MSSearchResult(
-            success=True,
-            spectra=spectra,
-            total_results=len(spectra),
-            source="MassBank EU",
-            citation=self.get_citation(),
-            request_time=response.get("request_time", 0.0),
-            cached=response.get("cached", False),
+            request_time=request_time,
+            cached=False,
         )
 
     def get_spectrum_by_id(self, spectrum_id: str) -> Optional[ExperimentalSpectrum]:
@@ -262,70 +179,83 @@ class MassBankConnector(MSDatabaseConnector):
         Returns:
             ExperimentalSpectrum or None if not found
         """
-        url = f"{self.config.base_url}/getRecord"
-        params = {"id": spectrum_id}
-
-        response = self._make_request(url, params=params)
-
-        if not response["success"]:
-            logger.warning(f"Failed to retrieve spectrum {spectrum_id}: {response.get('error_message')}")
+        try:
+            response = requests.get(
+                f"{self.config.base_url}/records/{spectrum_id}",
+                timeout=self.config.timeout,
+                headers={"User-Agent": self.config.user_agent},
+            )
+            response.raise_for_status()
+            record = response.json()
+            return self._parse_massbank_record(record)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve spectrum {spectrum_id}: {e}")
             return None
 
-        return self._parse_massbank_record(response["data"])
-
-    def _parse_search_results(self, data: any) -> List[ExperimentalSpectrum]:
-        """Parse search results from MassBank API."""
-        spectra = []
-
-        if not isinstance(data, list):
-            return spectra
-
-        for record in data:
-            try:
-                spectrum = self._parse_massbank_record(record)
-                if spectrum:
-                    spectra.append(spectrum)
-            except Exception as e:
-                logger.warning(f"Failed to parse MassBank record: {e}")
-                continue
-
-        return spectra
-
-    def _parse_massbank_record(self, record: dict) -> Optional[ExperimentalSpectrum]:
-        """Parse a single MassBank record into ExperimentalSpectrum."""
+    def _parse_massbank_record(self, record: Dict[str, Any]) -> Optional[ExperimentalSpectrum]:
+        """Parse a MassBank 3 API record into ExperimentalSpectrum."""
         try:
             # Extract basic info
             spectrum_id = record.get("accession", "")
-            name = record.get("compound", {}).get("names", [""])[0]
-            formula = record.get("compound", {}).get("formula", "")
-            exact_mass = record.get("compound", {}).get("mass", None)
-            smiles = record.get("compound", {}).get("smiles", "")
-            inchi = record.get("compound", {}).get("inchi", "")
-            inchi_key = record.get("compound", {}).get("inchikey", "")
+            
+            compound = record.get("compound", {})
+            names = compound.get("names", [])
+            name = names[0] if names else ""
+            formula = compound.get("formula", "")
+            exact_mass = compound.get("mass", None)
+            smiles = compound.get("smiles", "")
+            inchi = compound.get("inchi", "")
+            
+            # Extract InChI key from links
+            inchi_key = ""
+            links = compound.get("link", [])
+            for link in links:
+                if link.get("database") == "INCHIKEY":
+                    inchi_key = link.get("identifier", "")
+                    break
 
             # Extract acquisition info
             acquisition = record.get("acquisition", {})
             instrument = acquisition.get("instrument", "")
             instrument_type = acquisition.get("instrument_type", "")
+            
+            ms_info = acquisition.get("mass_spectrometry", {})
+            ion_mode_str = ms_info.get("ion_mode", "")
+            ionization_mode = self._parse_ionization_mode(ion_mode_str, instrument_type)
 
-            # Extract MS info
-            ms_info = record.get("ms", {})
-            ionization_mode_str = ms_info.get("ionization_mode", "")
-            ionization_mode = self._parse_ionization_mode(ionization_mode_str)
-
-            precursor_mz = ms_info.get("precursor_mz", None)
-            precursor_type = ms_info.get("precursor_type", "")
-            collision_energy = ms_info.get("collision_energy", "")
+            # Extract collision energy from subtags
+            collision_energy = ""
+            subtags = ms_info.get("subtags", [])
+            for subtag in subtags:
+                if subtag.get("subtag") in ["COLLISION_ENERGY", "IONIZATION_ENERGY"]:
+                    collision_energy = subtag.get("value", "")
+                    break
 
             # Extract peaks
-            peaks_data = record.get("peaks", {}).get("peak_list", [])
-            peaks = [Peak(mz=float(p[0]), intensity=float(p[1])) for p in peaks_data if len(p) >= 2]
+            peak_data = record.get("peak", {}).get("peak", {})
+            peak_values = peak_data.get("values", [])
+            
+            peaks = []
+            for p in peak_values:
+                mz = p.get("mz")
+                intensity = p.get("intensity") or p.get("rel")  # Try both
+                if mz is not None and intensity is not None:
+                    peaks.append(Peak(mz=float(mz), intensity=float(intensity)))
+
+            if not peaks:
+                return None
 
             # Extract metadata
-            authors = record.get("contributor", "").split(", ") if record.get("contributor") else []
-            date_created = record.get("date", {}).get("created", "")
+            authors = [a.get("name", "") for a in record.get("authors", [])]
+            date_info = record.get("date", {})
+            date_created = date_info.get("created", "")
 
             url = f"https://massbank.eu/MassBank/RecordDisplay?id={spectrum_id}"
+
+            # Determine spectrum type from instrument
+            spectrum_type = SpectrumType.EXPERIMENTAL
+            if "MS2" in str(ms_info.get("ms_type", "")) or "MS/MS" in instrument_type:
+                spectrum_type = SpectrumType.MS2
 
             spectrum = ExperimentalSpectrum(
                 spectrum_id=spectrum_id,
@@ -336,10 +266,8 @@ class MassBankConnector(MSDatabaseConnector):
                 inchi=inchi,
                 inchi_key=inchi_key,
                 peaks=peaks,
-                precursor_mz=precursor_mz,
-                precursor_type=precursor_type,
                 ionization_mode=ionization_mode,
-                spectrum_type=SpectrumType.EXPERIMENTAL,
+                spectrum_type=spectrum_type,
                 collision_energy=collision_energy,
                 instrument=instrument,
                 instrument_type=instrument_type,
@@ -358,35 +286,45 @@ class MassBankConnector(MSDatabaseConnector):
 
     @staticmethod
     def _convert_ionization_mode(mode: IonizationMode) -> str:
-        """Convert IonizationMode enum to MassBank format."""
+        """Convert IonizationMode enum to MassBank API format."""
         mapping = {
-            IonizationMode.EI: "EI",
-            IonizationMode.ESI_POSITIVE: "ESI+",
-            IonizationMode.ESI_NEGATIVE: "ESI-",
-            IonizationMode.APCI_POSITIVE: "APCI+",
-            IonizationMode.APCI_NEGATIVE: "APCI-",
-            IonizationMode.CI: "CI",
-            IonizationMode.CID: "CID",
+            IonizationMode.EI: "POSITIVE",  # EI is typically positive mode
+            IonizationMode.ESI_POSITIVE: "POSITIVE",
+            IonizationMode.ESI_NEGATIVE: "NEGATIVE",
+            IonizationMode.APCI_POSITIVE: "POSITIVE",
+            IonizationMode.APCI_NEGATIVE: "NEGATIVE",
+            IonizationMode.CI: "POSITIVE",
+            IonizationMode.CID: "POSITIVE",
         }
-        return mapping.get(mode, mode.value)
+        return mapping.get(mode, "POSITIVE")
 
     @staticmethod
-    def _parse_ionization_mode(mode_str: str) -> Optional[IonizationMode]:
-        """Parse ionization mode string to enum."""
-        mode_str_upper = mode_str.upper().strip()
+    def _parse_ionization_mode(ion_mode_str: str, instrument_type: str = "") -> Optional[IonizationMode]:
+        """Parse ionization mode from MassBank fields."""
+        ion_mode_upper = ion_mode_str.upper().strip()
+        instr_upper = instrument_type.upper()
 
-        mapping = {
-            "EI": IonizationMode.EI,
-            "ESI+": IonizationMode.ESI_POSITIVE,
-            "ESI-": IonizationMode.ESI_NEGATIVE,
-            "APCI+": IonizationMode.APCI_POSITIVE,
-            "APCI-": IonizationMode.APCI_NEGATIVE,
-            "CI": IonizationMode.CI,
-            "CID": IonizationMode.CID,
-            "MALDI": IonizationMode.MALDI,
-        }
+        # Check instrument type for EI
+        if "EI" in instr_upper:
+            return IonizationMode.EI
+        elif "CI" in instr_upper and "APCI" not in instr_upper:
+            return IonizationMode.CI
+        elif "ESI" in instr_upper:
+            if ion_mode_upper == "NEGATIVE":
+                return IonizationMode.ESI_NEGATIVE
+            return IonizationMode.ESI_POSITIVE
+        elif "APCI" in instr_upper:
+            if ion_mode_upper == "NEGATIVE":
+                return IonizationMode.APCI_NEGATIVE
+            return IonizationMode.APCI_POSITIVE
 
-        return mapping.get(mode_str_upper, IonizationMode.OTHER)
+        # Fall back to ion mode string
+        if ion_mode_upper == "POSITIVE":
+            return IonizationMode.ESI_POSITIVE
+        elif ion_mode_upper == "NEGATIVE":
+            return IonizationMode.ESI_NEGATIVE
+
+        return IonizationMode.OTHER
 
     def get_citation(self) -> str:
         """Get citation for MassBank."""

@@ -35,17 +35,21 @@ def create_ms_connector(
         >>> criteria = SpectrumSearchCriteria(formula="C6H12O6", ionization_mode=IonizationMode.EI)
         >>> results = connector.search_spectrum(criteria)
     """
-    config = DatabaseConfig(database_type=db_type, name=db_type.value, **config_params)
-
+    # Use database-specific config factories to ensure proper defaults (base_url, etc.)
     if db_type == DatabaseType.MASSBANK:
+        config = DatabaseConfig.for_massbank(**config_params)
         return MassBankConnector(config)
     elif db_type == DatabaseType.MONA:
+        config = DatabaseConfig.for_mona(**config_params)
         return MoNAConnector(config)
     elif db_type == DatabaseType.NIST_MS:
+        config = DatabaseConfig.for_nist_ms(**config_params)
         return NISTMSConnector(config)
     elif db_type == DatabaseType.SDBS:
+        config = DatabaseConfig.for_sdbs(**config_params)
         return SDBSConnector(config)
     elif db_type == DatabaseType.MASSSPECGYM:
+        config = DatabaseConfig.for_massspecgym(**config_params)
         return MassSpecGymConnector(config)
     else:
         raise ValueError(f"Unsupported database type: {db_type}")
