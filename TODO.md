@@ -25,14 +25,14 @@ This document tracks planned improvements, integrations, and research directions
 | ID | Task | Impact | Effort | Priority | Status |
 |----|------|--------|--------|----------|--------|
 | A1 | MLIP for CREST msreact | High | Low | **P0** | In Progress |
-| A2 | Fragment m/z cache (medusa-search) | Very High | Medium | **P0** | Not Started |
+| A2 | Fragment m/z cache | Very High | Medium | **P0** | ✅ Complete |
 | V1 | QCxMS2-to-MGF converter | Medium | Low | **P1** | Not Started |
 | V2 | DreaMS-based validation metric | High | Medium | **P1** | Not Started |
 | V3 | Automated benchmark pipeline | High | Medium | **P1** | Partial |
 | A3 | Fragment prioritization (DreaMS) | High | Medium | **P1** | Not Started |
 | A4 | Formula pruning (MEDUSA LSTM) | Medium | Medium | **P2** | Not Started |
 | A5 | Early stopping via embeddings | Medium | Low | **P2** | Not Started |
-| A6 | Pre-computed fragment database | Very High | High | **P2** | Not Started |
+| A6 | Pre-computed fragment database | Very High | High | **P2** | ✅ Complete (merged with A2) |
 | V4 | Multi-molecule benchmark suite | High | High | **P2** | Not Started |
 | R1 | ML-predicted NEB barriers | Very High | Very High | **P3** | Research |
 | R2 | GNN direct fragmentation | Very High | Very High | **P3** | Research |
@@ -501,6 +501,23 @@ Use Case:
 ---
 
 ## Completed Work
+
+### Fragment Cache System (January 15, 2026)
+- [x] SQLite-based fragment cache (`cache/fragment_cache.py`)
+- [x] QCxMS2 output parser (`cache/qcxms2_output_parser.py`)
+- [x] CLI tool for cache management (`cache/cli.py`)
+- [x] Production database seeded with 132 fragments from benzene calculations
+- [x] Database location: `/mnt/beegfs/software/qcxms2/fragment_cache.db`
+
+**Usage**:
+```python
+from database_integration.cache import FragmentCache
+
+cache = FragmentCache()  # Uses default database
+result = cache.find_fragment(mz=77.104, formula="C6H5")
+if result:
+    print(f"Cached barrier: {result.barrier_kcal_mol} kcal/mol")
+```
 
 ### Database Integration Module (January 2026)
 - [x] MassBank v3 API connector (`connectors/massbank.py`)
