@@ -63,6 +63,21 @@ from .metrics import (
     calculate_spectral_entropy_similarity,
     calculate_weighted_cosine,
 )
+from .dreams_metrics import (
+    DreaMSComparisonResult,
+    DreaMSSimilarity,
+    DreaMSValidationReport,
+    LibrarySearchResult,
+    compare_qcxms2_to_massbank,
+    dreams_embedding_similarity,
+    dreams_library_search,
+    generate_validation_report,
+)
+from .run_benchmark import (
+    BenchmarkPipeline,
+    BenchmarkConfig as PipelineConfig,
+    BenchmarkResult as PipelineResult,
+)
 
 __all__ = [
     # Main classes
@@ -85,4 +100,17 @@ __all__ = [
     "calculate_qcxms2_validation_metrics",
     "calculate_spectral_entropy_similarity",
     "calculate_weighted_cosine",
+    # DreaMS-based metrics
+    "DreaMSSimilarity",
+    "DreaMSComparisonResult",
+    "DreaMSValidationReport",
+    "LibrarySearchResult",
+    "dreams_embedding_similarity",
+    "dreams_library_search",
+    "compare_qcxms2_to_massbank",
+    "generate_validation_report",
+    # Pipeline
+    "BenchmarkPipeline",
+    "PipelineConfig",
+    "PipelineResult",
 ]

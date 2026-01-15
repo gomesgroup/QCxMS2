@@ -27,11 +27,11 @@ This document tracks planned improvements, integrations, and research directions
 | A1 | MLIP for CREST msreact | Low* | Low | **P0** | ✅ Evaluated |
 | A2 | Fragment m/z cache | Very High | Medium | **P0** | ✅ Complete |
 | V1 | QCxMS2-to-MGF converter | Medium | Low | **P1** | ✅ Complete |
-| V2 | DreaMS-based validation metric | High | Medium | **P1** | Not Started |
-| V3 | Automated benchmark pipeline | High | Medium | **P1** | Partial |
+| V2 | DreaMS-based validation metric | High | Medium | **P1** | ✅ Complete |
+| V3 | Automated benchmark pipeline | High | Medium | **P1** | ✅ Complete |
 | A3 | Fragment prioritization (DreaMS) | High | Medium | **P1** | ✅ Complete |
 | A4 | Formula pruning (MEDUSA LSTM) | Medium | Medium | **P2** | Not Started |
-| A5 | Early stopping via embeddings | Medium | Low | **P2** | Not Started |
+| A5 | Early stopping via embeddings | Medium | Low | **P2** | ✅ Complete |
 | A6 | Pre-computed fragment database | Very High | High | **P2** | ✅ Complete (merged with A2) |
 | V4 | Multi-molecule benchmark suite | High | High | **P2** | Not Started |
 | R1 | ML-predicted NEB barriers | Very High | Very High | **P3** | Research |
@@ -584,6 +584,70 @@ peaks_to_mgf(
 - [x] Benchmark script created (`benchmark-crest-mlip.slurm`)
 - [x] Result: MLIP does NOT help for CREST msreact (GFN2 is fast enough)
 - [x] MLIP benefit is in NEB calculations (already implemented via `-mlip` flag)
+
+### Early Stopping Module (January 15, 2026)
+- [x] `EarlyStoppingMonitor` class for monitoring QCxMS2 calculations
+- [x] Real-time parsing of `allpeaks.dat`
+- [x] DreaMS embedding similarity to reference spectrum
+- [x] Stagnation detection (stops if no improvement)
+- [x] CLI for monitoring running calculations
+
+**Usage**:
+```python
+from database_integration.acceleration import EarlyStoppingMonitor
+
+monitor = EarlyStoppingMonitor(reference_spectrum="experimental.mgf")
+status = monitor.check("/path/to/qcxms2_calculation")
+print(f"Similarity: {status.similarity:.4f}, Converged: {status.converged}")
+```
+
+### DreaMS Validation Metrics (January 15, 2026)
+- [x] `DreaMSSimilarity` class for embedding-based comparison
+- [x] `DreaMSValidationReport` for comprehensive reports
+- [x] Library search functionality
+- [x] Integration with existing benchmark framework
+- [x] CLI tool for comparison and library search
+
+**Usage**:
+```python
+from database_integration.benchmark import (
+    DreaMSSimilarity,
+    dreams_embedding_similarity,
+    generate_validation_report,
+)
+
+# Quick comparison
+similarity = dreams_embedding_similarity("calculated.mgf", "reference.mgf")
+
+# Full report
+report = generate_validation_report(
+    "calculated.mgf", "reference.mgf",
+    molecule_name="Benzene",
+    smiles="c1ccccc1"
+)
+print(report.to_markdown())
+```
+
+### Automated Benchmark Pipeline (January 15, 2026)
+- [x] `BenchmarkPipeline` class for end-to-end validation
+- [x] SMILES to XYZ conversion (RDKit/OpenBabel)
+- [x] QCxMS2 calculation automation
+- [x] MGF conversion and DreaMS comparison
+- [x] Batch mode from CSV
+- [x] SLURM job script generation
+- [x] Markdown report generation
+
+**Usage**:
+```bash
+# Single molecule
+python run_benchmark.py --smiles "c1ccccc1" --name benzene --reference exp.mgf
+
+# Batch from CSV
+python run_benchmark.py --batch molecules.csv --output-dir results/
+
+# Generate SLURM script
+python run_benchmark.py --smiles "c1ccccc1" --generate-slurm benzene_job.slurm
+```
 
 ---
 
