@@ -24,18 +24,20 @@ This document tracks planned improvements, integrations, and research directions
 
 | ID | Task | Impact | Effort | Priority | Status |
 |----|------|--------|--------|----------|--------|
-| A1 | MLIP for CREST msreact | High | Low | **P0** | In Progress |
+| A1 | MLIP for CREST msreact | Low* | Low | **P0** | ✅ Evaluated |
 | A2 | Fragment m/z cache | Very High | Medium | **P0** | ✅ Complete |
-| V1 | QCxMS2-to-MGF converter | Medium | Low | **P1** | Not Started |
+| V1 | QCxMS2-to-MGF converter | Medium | Low | **P1** | ✅ Complete |
 | V2 | DreaMS-based validation metric | High | Medium | **P1** | Not Started |
 | V3 | Automated benchmark pipeline | High | Medium | **P1** | Partial |
-| A3 | Fragment prioritization (DreaMS) | High | Medium | **P1** | Not Started |
+| A3 | Fragment prioritization (DreaMS) | High | Medium | **P1** | ✅ Complete |
 | A4 | Formula pruning (MEDUSA LSTM) | Medium | Medium | **P2** | Not Started |
 | A5 | Early stopping via embeddings | Medium | Low | **P2** | Not Started |
 | A6 | Pre-computed fragment database | Very High | High | **P2** | ✅ Complete (merged with A2) |
 | V4 | Multi-molecule benchmark suite | High | High | **P2** | Not Started |
 | R1 | ML-predicted NEB barriers | Very High | Very High | **P3** | Research |
 | R2 | GNN direct fragmentation | Very High | Very High | **P3** | Research |
+
+*A1 Note: Benchmarking showed MLIP doesn't help for CREST msreact (GFN2 is already fast for conformer search). MLIP benefit is in NEB barrier calculations, which is already implemented via `qcxms2 -mlip`.
 
 **Legend**: P0 = Do Now, P1 = Next Sprint, P2 = This Month, P3 = Future Research
 
@@ -540,6 +542,48 @@ if result:
 - [x] MLIP-accelerated NEB calculations working
 - [x] AIMNet2 server at id-gpu01:8888
 - [x] CREST MLIP wrapper script
+
+### Fragment Prioritization Module (January 15, 2026)
+- [x] FragmentPrioritizer class with multiple methods:
+  - [x] `from_common_rules()`: Chemical rule-based prediction
+  - [x] `from_smiles()`: Structure-based search in databases
+  - [x] `from_spectrum()`: DreaMS embedding similarity search
+- [x] CREST constraint file generation (`write_crest_constraints()`)
+- [x] Integration with fragment cache for barrier lookup
+- [x] CLI tool (`acceleration/cli.py`)
+
+**Usage**:
+```python
+from database_integration.acceleration import FragmentPrioritizer
+
+prioritizer = FragmentPrioritizer()
+fragments = prioritizer.from_common_rules("c1ccccc1", top_k=20)
+prioritizer.write_crest_constraints(fragments, "constraints.inp")
+```
+
+### QCxMS2-to-MGF Converter (January 15, 2026)
+- [x] `peaks_to_mgf()` function for single file conversion
+- [x] `peaks_to_mgf_batch()` for multiple files
+- [x] Full metadata handling (SMILES, formula, charge, etc.)
+- [x] Automatic metadata detection from QCxMS2 output
+- [x] Tested with DreaMS embeddings
+
+**Usage**:
+```python
+from database_integration.converters import peaks_to_mgf
+
+peaks_to_mgf(
+    "calculation/peaks.dat",
+    "spectrum.mgf",
+    title="Benzene EI-MS",
+    smiles="c1ccccc1"
+)
+```
+
+### CREST MLIP Benchmark (January 15, 2026)
+- [x] Benchmark script created (`benchmark-crest-mlip.slurm`)
+- [x] Result: MLIP does NOT help for CREST msreact (GFN2 is fast enough)
+- [x] MLIP benefit is in NEB calculations (already implemented via `-mlip` flag)
 
 ---
 
