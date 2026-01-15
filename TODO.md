@@ -30,7 +30,7 @@ This document tracks planned improvements, integrations, and research directions
 | V2 | DreaMS-based validation metric | High | Medium | **P1** | ✅ Complete |
 | V3 | Automated benchmark pipeline | High | Medium | **P1** | ✅ Complete |
 | A3 | Fragment prioritization (DreaMS) | High | Medium | **P1** | ✅ Complete |
-| A4 | Formula pruning (MEDUSA LSTM) | Medium | Medium | **P2** | Not Started |
+| A4 | Formula pruning (chemical rules) | Medium | Medium | **P2** | ✅ Complete |
 | A5 | Early stopping via embeddings | Medium | Low | **P2** | ✅ Complete |
 | A6 | Pre-computed fragment database | Very High | High | **P2** | ✅ Complete (merged with A2) |
 | V4 | Multi-molecule benchmark suite | High | High | **P2** | Not Started |
@@ -647,6 +647,37 @@ python run_benchmark.py --batch molecules.csv --output-dir results/
 
 # Generate SLURM script
 python run_benchmark.py --smiles "c1ccccc1" --generate-slurm benzene_job.slurm
+```
+
+### Formula Pruning Module (January 15, 2026)
+- [x] `FormulaPruner` class for predicting fragment formulas
+- [x] Chemical heuristics: SENIOR rules, nitrogen rule, DBE constraints
+- [x] Support for radical cations (half-integer DBE)
+- [x] Parent molecule subformula filtering
+- [x] CREST constraint file generation
+- [x] CLI tool for formula prediction
+
+**Key Features**:
+- Properly handles radical cations common in EI-MS (e.g., C6H5+, C3H3+)
+- Scores candidates based on mass accuracy, DBE, and parent compatibility
+- Can constrain CREST msreact search to focus on likely fragments
+
+**Usage**:
+```python
+from database_integration.acceleration import FormulaPruner
+
+# Create pruner from parent molecule
+pruner = FormulaPruner(parent_formula="C6H6")  # Benzene
+
+# Predict formulas for missing peaks
+candidates = pruner.predict_formulas(mz=77.039)  # C6H5+ phenyl
+# Returns: [FormulaCandidate(formula="C6H5", mass=77.0386, score=0.58)]
+
+# Generate CREST constraints for directed fragmentation
+pruner.write_crest_constraints(
+    target_peaks=[77.039, 51.023, 39.023],
+    output_file="constraints.inp"
+)
 ```
 
 ---
